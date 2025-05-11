@@ -42,6 +42,10 @@ public class MinecraftCameraController : MonoBehaviour
         {
             Debug.LogError("No Camera component found on this GameObject!");
         }
+
+        // Debug the camera position at start
+        Debug.Log($"Camera Awake - Local position: {transform.localPosition}, World position: {transform.position}");
+        Debug.Log($"Parent position: {(playerBody != null ? playerBody.position : Vector3.zero)}");
         
         // Lock and hide cursor
         LockCursor();
@@ -57,8 +61,16 @@ public class MinecraftCameraController : MonoBehaviour
     
     private void OnEnable()
     {
+        // Debug camera position again
+        Debug.Log($"Camera OnEnable - Local position: {transform.localPosition}, World position: {transform.position}");
+        
         // Make sure cursor is locked when script is enabled
         LockCursor();
+    }
+    
+    private void Start()
+    {
+        Debug.Log($"Camera Start - Local position: {transform.localPosition}, World position: {transform.position}");
     }
     
     public void OnLook(InputAction.CallbackContext context)
@@ -67,9 +79,28 @@ public class MinecraftCameraController : MonoBehaviour
         Debug.Log($"OnLook called: Input = ({lookInput.x}, {lookInput.y})");
     }
     
+    // Prevent any accidental resets of camera position
+    private Vector3 initialLocalPosition;
     private void LateUpdate()
     {
+        // Store the initial local position on first frame
+        if (initialLocalPosition == Vector3.zero && transform.localPosition != Vector3.zero)
+        {
+            initialLocalPosition = transform.localPosition;
+            Debug.Log($"Stored initial camera position: {initialLocalPosition}");
+        }
+        
+        // Handle rotation
         HandleRotation();
+        
+        // If camera position has changed from what's expected, log a warning
+        if (initialLocalPosition != Vector3.zero && 
+            Vector3.Distance(transform.localPosition, initialLocalPosition) > 0.01f)
+        {
+            Debug.LogWarning($"Camera position changed from {initialLocalPosition} to {transform.localPosition}");
+            // Option: Force position back to original setting
+            // transform.localPosition = initialLocalPosition;
+        }
     }
     
     private void HandleRotation()

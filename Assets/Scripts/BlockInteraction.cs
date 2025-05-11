@@ -234,10 +234,12 @@ public class BlockInteraction : MonoBehaviour
             }
             
             // Break block
-            if (isBreakingBlock && hit.collider.CompareTag("Block"))
+            if (isBreakingBlock)
             {
-                // Find which chunk this block belongs to
-                Chunk chunk = hit.transform.GetComponentInParent<Chunk>();
+                // Try to get chunk from hit collider
+                Chunk chunk = hit.collider.GetComponent<Chunk>();
+                
+                // If the hit collider is the chunk's mesh collider
                 if (chunk != null)
                 {
                     // Convert world position to chunk-local coordinates
@@ -247,8 +249,7 @@ public class BlockInteraction : MonoBehaviour
                         Mathf.FloorToInt(hit.point.z - (hit.normal.z * 0.001f)) - Mathf.FloorToInt(chunk.transform.position.z)
                     );
                     
-                    // Call the chunk's method to remove the block
-                    // This would depend on your specific implementation
+                    // Call the chunk's method to remove the block (need to implement this)
                     // chunk.RemoveBlock(localPos.x, localPos.y, localPos.z);
                     Debug.Log($"Breaking block at {localPos} in chunk at {chunk.transform.position}");
                 }

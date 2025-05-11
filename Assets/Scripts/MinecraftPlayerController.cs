@@ -32,9 +32,11 @@ public class MinecraftPlayerController : MonoBehaviour
     private bool jumpInput;
     private bool sprintInput;
 
+    private bool firstUpdateDone = false;
+
     private void Awake()
     {
-        Debug.Log("MinecraftPlayerController Awake called");
+        Debug.Log("MinecraftPlayerController Awake called - Player height: " + playerHeight + ", Eye height: " + eyeHeight);
         characterController = GetComponent<CharacterController>();
         
         // Find camera - don't rely on Camera.main which might be null
@@ -71,17 +73,66 @@ public class MinecraftPlayerController : MonoBehaviour
             characterController.height = playerHeight;
             characterController.radius = playerWidth / 2.0f;
             
+            // Also fix the character controller center to ensure the bottom is at the ground
+            characterController.center = new Vector3(0, playerHeight / 2, 0);
+            Debug.Log($"Set character controller height: {playerHeight}, radius: {playerWidth/2}, center Y: {playerHeight/2}");
+            
             // Position camera at eye height if it's our child
-            if (cameraTransform != null && cameraTransform.parent == transform)
-            {
-                cameraTransform.localPosition = new Vector3(0, eyeHeight - (playerHeight / 2), 0);
-                Debug.Log("Set camera position to: " + cameraTransform.localPosition);
-            }
+            PositionCameraAtEyeHeight();
         }
         else
         {
             Debug.LogError("No CharacterController component found! Please add one.");
         }
+    }
+
+    private void PositionCameraAtEyeHeight()
+    {
+        if (cameraTransform != null && cameraTransform.parent == transform)
+        {
+            // Calculate the offset - The camera should be at eye level (1.62 blocks from ground)
+            // When character pivot is at the bottom, camera should be at eyeHeight
+            // When character pivot is at the center, camera should be at eyeHeight - playerHeight/2
+            
+            // OPTION 1: Direct positioning at eye height from ground (assuming player pivot at ground level)
+            //cameraTransform.localPosition = new Vector3(0, eyeHeight, 0);
+            
+            // OPTION 2: Positioning relative to character controller center
+            float cameraOffset = eyeHeight - (playerHeight / 2);
+            cameraTransform.localPosition = new Vector3(0, cameraOffset, 0);
+            
+            // OPTION 3: Force absolute world height directly
+            //Vector3 worldPos = transform.position;
+            //worldPos.y += eyeHeight;
+            //cameraTransform.position = worldPos;
+            
+            Debug.Log($"CAMERA POSITION SET - Player total height: {playerHeight}, Eye height from ground: {eyeHeight}");
+            Debug.Log($"Character pivot at {transform.position.y}, Character center at {transform.position.y + playerHeight/2}");
+            Debug.Log($"Camera local position set to: {cameraTransform.localPosition}, World position: {cameraTransform.position}");
+        }
+        else
+        {
+            Debug.LogWarning("Cannot position camera - camera transform not found or not a child of player");
+        }
+    }
+
+    private void Start()
+    {
+        Debug.Log("MinecraftPlayerController Start called");
+        // Position camera again in Start to make sure it's set
+        PositionCameraAtEyeHeight();
+    }
+
+    private void Update()
+    {
+        if (!firstUpdateDone)
+        {
+            firstUpdateDone = true;
+            Debug.Log("First Update - Setting camera position again");
+            PositionCameraAtEyeHeight();
+        }
+        
+        HandleMovement();
     }
 
     public void OnMove(InputAction.CallbackContext context)
@@ -97,11 +148,6 @@ public class MinecraftPlayerController : MonoBehaviour
     public void OnSprint(InputAction.CallbackContext context)
     {
         sprintInput = context.ReadValueAsButton();
-    }
-
-    private void Update()
-    {
-        HandleMovement();
     }
 
     private void HandleMovement()
@@ -146,5 +192,64 @@ public class MinecraftPlayerController : MonoBehaviour
         
         // Apply vertical movement
         characterController.Move(velocity * Time.deltaTime);
+    }
+
+    private void OnDrawGizmos()
+    {
+        // Draw player height outline
+        Gizmos.color = Color.blue;
+        // Draw a wireframe cylinder to represent the player's collider
+        Vector3 bottom = transform.position;
+        Vector3 top = transform.position + new Vector3(0, playerHeight, 0);
+        
+        // Draw vertical line for height
+        Gizmos.DrawLine(bottom, top);
+        
+        // Draw circles at bottom and top
+        DrawWireCircle(bottom, playerWidth / 2, 16);
+        DrawWireCircle(top, playerWidth / 2, 16);
+        
+        // Draw eye level
+        Gizmos.color = Color.red;
+        Vector3 eyePos = transform.position + new Vector3(0, eyeHeight, 0);
+        
+        // Draw a horizontal cross at eye level
+        float crossSize = playerWidth / 2;
+        Gizmos.DrawLine(eyePos - new Vector3(crossSize, 0, 0), eyePos + new Vector3(crossSize, 0, 0));
+        Gizmos.DrawLine(eyePos - new Vector3(0, 0, crossSize), eyePos + new Vector3(0, 0, crossSize));
+        
+        // Draw small circle at eye level
+        DrawWireCircle(eyePos, playerWidth / 4, 8);
+        
+        // If we have a camera child, draw its position as well
+        if (cameraTransform != null)
+        {
+            Gizmos.color = Color.green;
+            Gizmos.DrawWireSphere(cameraTransform.position, 0.1f);
+        }
+    }
+
+    private void DrawWireCircle(Vector3 position, float radius, int segments)
+    {
+        float angle = 0f;
+        Vector3 lastPoint = position;
+        Vector3 firstPoint = position;
+        
+        for (int i = 0; i < segments + 1; i++)
+        {
+            angle = (float)i / segments * 360 * Mathf.Deg2Rad;
+            Vector3 newPoint = position + new Vector3(Mathf.Sin(angle) * radius, 0, Mathf.Cos(angle) * radius);
+            
+            if (i > 0)
+                Gizmos.DrawLine(lastPoint, newPoint);
+            
+            if (i == 1)
+                firstPoint = newPoint;
+            
+            lastPoint = newPoint;
+        }
+        
+        // Close the circle
+        Gizmos.DrawLine(lastPoint, firstPoint);
     }
 } 
