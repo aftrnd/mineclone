@@ -14,15 +14,26 @@ public class Chunk : MonoBehaviour {
         meshFilter = GetComponent<MeshFilter>();
         meshRenderer = GetComponent<MeshRenderer>();
         
+        // Initialize texture manager if not initialized yet
+        if (!BlockTextureManager.isInitialized) {
+            BlockTextureManager.Initialize();
+        }
+        
         // Ensure we're using the BlockMaterial
         if (blockMaterial != null) {
             meshRenderer.material = blockMaterial;
+            // Make sure the texture array is assigned to the material
+            blockMaterial.SetTexture("_BlockTextureArray", BlockTextureManager.textureArray);
+            blockMaterial.SetTexture("_TextureArray", BlockTextureManager.textureArray);
         } else {
             Debug.LogWarning("Block material not assigned to Chunk! Using default material.");
             // Try to find the material by name
             blockMaterial = Resources.Load<Material>("BlockMaterial");
             if (blockMaterial != null) {
                 meshRenderer.material = blockMaterial;
+                // Make sure the texture array is assigned to the material
+                blockMaterial.SetTexture("_BlockTextureArray", BlockTextureManager.textureArray);
+                blockMaterial.SetTexture("_TextureArray", BlockTextureManager.textureArray);
             }
         }
         
@@ -32,12 +43,21 @@ public class Chunk : MonoBehaviour {
 
     void GenerateBlocks() {
         for (int x = 0; x < chunkSize; x++) {
-            for (int y = 0; y < chunkSize; y++) {
-                for (int z = 0; z < chunkSize; z++) {
-                    if (y < chunkSize / 2)
-                        blocks[x, y, z] = new Block(BlockType.Dirt);
-                    else
+            for (int z = 0; z < chunkSize; z++) {
+                // Find the top layer for each x,z column (half the chunk height)
+                int topY = chunkSize / 2 - 1;
+                
+                for (int y = 0; y < chunkSize; y++) {
+                    if (y < chunkSize / 2) {
+                        // Set the top layer to grass, everything below to dirt
+                        if (y == topY) {
+                            blocks[x, y, z] = new Block(BlockType.Grass);
+                        } else {
+                            blocks[x, y, z] = new Block(BlockType.Dirt);
+                        }
+                    } else {
                         blocks[x, y, z] = new Block(BlockType.Air);
+                    }
                 }
             }
         }

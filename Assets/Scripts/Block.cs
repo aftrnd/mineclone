@@ -27,8 +27,15 @@ public class Block {
                 return BlockTextureManager.GetTextureIndex("stone");
 
             case BlockType.Grass:
-                if (face == 4) return BlockTextureManager.GetTextureIndex("grass_top");     // Top
-                if (face == 5) return BlockTextureManager.GetTextureIndex("dirt");          // Bottom
+                // Face indexes in MeshBuilder:
+                // 0 = Front (Z+)
+                // 1 = Back (Z-)
+                // 2 = Top (Y+)
+                // 3 = Bottom (Y-)
+                // 4 = Left (X-)
+                // 5 = Right (X+)
+                if (face == 2) return BlockTextureManager.GetTextureIndex("grass_top");     // Top
+                if (face == 3) return BlockTextureManager.GetTextureIndex("dirt");          // Bottom
                 return BlockTextureManager.GetTextureIndex("grass_side");                   // Sides
 
             default:
