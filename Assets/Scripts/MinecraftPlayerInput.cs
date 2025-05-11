@@ -102,6 +102,29 @@ public class MinecraftPlayerInput : MonoBehaviour
         playerActions.FindAction("Sprint").performed += playerController.OnSprint;
         playerActions.FindAction("Sprint").canceled += playerController.OnSprint;
         
+        // Add flight toggle and down actions
+        var flyToggleAction = playerActions.FindAction("FlyToggle");
+        if (flyToggleAction != null)
+        {
+            flyToggleAction.performed += playerController.OnFlyToggle;
+            flyToggleAction.canceled += playerController.OnFlyToggle;
+        }
+        else
+        {
+            Debug.LogError("FlyToggle action not found in input actions!");
+        }
+        
+        var flyDownAction = playerActions.FindAction("FlyDown");
+        if (flyDownAction != null)
+        {
+            flyDownAction.performed += playerController.OnFlyDown;
+            flyDownAction.canceled += playerController.OnFlyDown;
+        }
+        else
+        {
+            Debug.LogError("FlyDown action not found in input actions!");
+        }
+        
         playerActions.FindAction("Look").performed += cameraController.OnLook;
         playerActions.FindAction("Look").canceled += cameraController.OnLook;
         
@@ -132,6 +155,21 @@ public class MinecraftPlayerInput : MonoBehaviour
         
         playerActions.FindAction("Sprint").performed -= playerController.OnSprint;
         playerActions.FindAction("Sprint").canceled -= playerController.OnSprint;
+        
+        // Unregister flight toggle and down actions
+        var flyToggleAction = playerActions.FindAction("FlyToggle");
+        if (flyToggleAction != null)
+        {
+            flyToggleAction.performed -= playerController.OnFlyToggle;
+            flyToggleAction.canceled -= playerController.OnFlyToggle;
+        }
+        
+        var flyDownAction = playerActions.FindAction("FlyDown");
+        if (flyDownAction != null)
+        {
+            flyDownAction.performed -= playerController.OnFlyDown;
+            flyDownAction.canceled -= playerController.OnFlyDown;
+        }
         
         playerActions.FindAction("Look").performed -= cameraController.OnLook;
         playerActions.FindAction("Look").canceled -= cameraController.OnLook;

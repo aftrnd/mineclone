@@ -105,13 +105,20 @@ public class WorldDebugger : MonoBehaviour
         Vector3 playerPos = player.position;
         Vector2Int playerChunk = worldManager.GetChunkCoordFromPosition(playerPos);
         
-        // Get terrain height at player position
+        // Get terrain height and biome at player position
         int terrainHeight = worldManager.GetTerrainHeight(playerPos.x, playerPos.z);
+        BiomeType biome = worldManager.GetBiomeAt(playerPos.x, playerPos.z);
+        
+        // Get elevation relative to sea level
+        int relativeHeight = Mathf.FloorToInt(playerPos.y) - TerrainGenerator.SEA_LEVEL;
+        string elevationStr = relativeHeight >= 0 ? $"+{relativeHeight}" : relativeHeight.ToString();
         
         // Create debug string
         string debugInfo = $"<b>Position:</b> ({playerPos.x:F1}, {playerPos.y:F1}, {playerPos.z:F1})\n" +
                           $"<b>Chunk:</b> {playerChunk.x}, {playerChunk.y}\n" +
+                          $"<b>Elevation:</b> {elevationStr} (sea level: {TerrainGenerator.SEA_LEVEL})\n" +
                           $"<b>Terrain Height:</b> {terrainHeight}\n" +
+                          $"<b>Biome:</b> {biome}\n" +
                           $"<b>Block:</b> {GetBlockTypeAtPosition(playerPos)}";
         
         // Display in UI if available
@@ -132,8 +139,9 @@ public class WorldDebugger : MonoBehaviour
                     float worldX = playerPos.x + x;
                     float worldZ = playerPos.z + z;
                     int height = worldManager.GetTerrainHeight(worldX, worldZ);
+                    BiomeType localBiome = worldManager.GetBiomeAt(worldX, worldZ);
                     bool isCave = worldManager.IsCave(worldX, Mathf.FloorToInt(playerPos.y), worldZ);
-                    Debug.Log($"Position ({worldX}, {worldZ}): Height={height}, Cave={isCave}");
+                    Debug.Log($"Position ({worldX}, {worldZ}): Height={height}, Biome={localBiome}, Cave={isCave}");
                 }
             }
         }
@@ -158,13 +166,50 @@ public class WorldDebugger : MonoBehaviour
             Vector3 playerPos = player.position;
             Vector2Int playerChunk = worldManager.GetChunkCoordFromPosition(playerPos);
             int terrainHeight = worldManager.GetTerrainHeight(playerPos.x, playerPos.z);
+            BiomeType biome = worldManager.GetBiomeAt(playerPos.x, playerPos.z);
+            
+            int relativeHeight = Mathf.FloorToInt(playerPos.y) - TerrainGenerator.SEA_LEVEL;
+            string elevationStr = relativeHeight >= 0 ? $"+{relativeHeight}" : relativeHeight.ToString();
             
             string debugInfo = $"Position: ({playerPos.x:F1}, {playerPos.y:F1}, {playerPos.z:F1})\n" +
                               $"Chunk: {playerChunk.x}, {playerChunk.y}\n" +
+                              $"Elevation: {elevationStr} (sea level: {TerrainGenerator.SEA_LEVEL})\n" +
                               $"Terrain Height: {terrainHeight}\n" +
+                              $"Biome: {biome}\n" +
                               $"Block: {GetBlockTypeAtPosition(playerPos)}";
             
-            GUI.Box(new Rect(10, 10, 300, 100), debugInfo, style);
+            // Main debug box
+            GUI.Box(new Rect(10, 10, 300, 130), debugInfo, style);
+            
+            // Biome color indicator
+            Color biomeColor = GetBiomeColor(biome);
+            Texture2D colorTexture = new Texture2D(1, 1);
+            colorTexture.SetPixel(0, 0, biomeColor);
+            colorTexture.Apply();
+            
+            GUIStyle colorStyle = new GUIStyle(GUI.skin.box);
+            colorStyle.normal.background = colorTexture;
+            
+            GUI.Box(new Rect(250, 88, 30, 18), "", colorStyle);
+        }
+    }
+    
+    private Color GetBiomeColor(BiomeType biome)
+    {
+        switch (biome)
+        {
+            case BiomeType.Plains:
+                return new Color(0.5f, 0.8f, 0.3f); // Light green
+            case BiomeType.Forest:
+                return new Color(0.0f, 0.6f, 0.0f); // Dark green
+            case BiomeType.Desert:
+                return new Color(0.9f, 0.8f, 0.3f); // Sand yellow
+            case BiomeType.Mountains:
+                return new Color(0.6f, 0.6f, 0.6f); // Gray
+            case BiomeType.Ocean:
+                return new Color(0.0f, 0.3f, 0.8f); // Blue
+            default:
+                return Color.white;
         }
     }
 } 

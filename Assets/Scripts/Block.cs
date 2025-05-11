@@ -4,7 +4,12 @@ public enum BlockType {
     Air,
     Dirt,
     Grass,
-    Stone
+    Stone,
+    Sand,
+    Gravel,
+    SnowGrass,
+    Clay,
+    Bedrock
 }
 
 public class Block {
@@ -29,6 +34,24 @@ public class Block {
 
             case BlockType.Stone:
                 return BlockTextureManager.GetTextureIndex("stone");
+                
+            case BlockType.Sand:
+                return BlockTextureManager.GetTextureIndex("dirt"); // Placeholder for sand
+                
+            case BlockType.Gravel:
+                return BlockTextureManager.GetTextureIndex("stone"); // Placeholder for gravel
+                
+            case BlockType.SnowGrass:
+                // Top is snow, sides are snowy grass, bottom is dirt
+                if (face == 2) return BlockTextureManager.GetTextureIndex("grass_top"); // Placeholder for snow
+                if (face == 3) return BlockTextureManager.GetTextureIndex("dirt");     
+                return BlockTextureManager.GetTextureIndex("grass_side");              // Placeholder for snowy grass
+                
+            case BlockType.Clay:
+                return BlockTextureManager.GetTextureIndex("dirt"); // Placeholder for clay
+                
+            case BlockType.Bedrock:
+                return BlockTextureManager.GetTextureIndex("stone"); // Placeholder for bedrock
 
             case BlockType.Grass:
                 // Face indexes in MeshBuilder:

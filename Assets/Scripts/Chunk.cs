@@ -17,10 +17,14 @@ public class Chunk : MonoBehaviour {
     // Reference to the world manager
     private WorldManager worldManager;
 
+    // Add YLevel property
+    public int YLevel { get; private set; }
+
     // Initialize the chunk with position
-    public void Initialize(Vector2Int chunkPosition)
+    public void Initialize(Vector2Int chunkPosition, int yLevel = 0)
     {
         ChunkPosition = chunkPosition;
+        YLevel = yLevel;
         
         // Find the world manager if not set
         if (worldManager == null)
@@ -93,7 +97,7 @@ public class Chunk : MonoBehaviour {
             // If no world manager, use simple terrain generation
             if (worldManager == null)
             {
-                Debug.LogWarning($"No WorldManager found for chunk at {ChunkPosition}. Using simple terrain generation.");
+                Debug.LogWarning($"No WorldManager found for chunk at {ChunkPosition}, Y={YLevel}. Using simple terrain generation.");
                 GenerateSimpleTerrain();
                 return;
             }
@@ -101,11 +105,11 @@ public class Chunk : MonoBehaviour {
             // Get world position for this chunk
             Vector3 worldPosition = new Vector3(
                 ChunkPosition.x * chunkSize,
-                0,
+                YLevel * chunkSize,
                 ChunkPosition.y * chunkSize
             );
             
-            Debug.Log($"Generating chunk at {ChunkPosition} (world pos: {worldPosition})");
+            Debug.Log($"Generating chunk at {ChunkPosition}, Y={YLevel} (world pos: {worldPosition})");
             
             for (int x = 0; x < chunkSize; x++) {
                 for (int z = 0; z < chunkSize; z++) {
@@ -117,48 +121,62 @@ public class Chunk : MonoBehaviour {
                     int terrainHeight = worldManager.GetTerrainHeight(worldX, worldZ);
                     
                     // Validate height (shouldn't be negative)
-                    if (terrainHeight < 0)
+                    if (terrainHeight < TerrainGenerator.MIN_HEIGHT)
                     {
-                        Debug.LogError($"Terrain generator returned negative height ({terrainHeight}) at {worldX},{worldZ}");
-                        terrainHeight = 0;
+                        Debug.LogError($"Terrain generator returned invalid height ({terrainHeight}) at {worldX},{worldZ}");
+                        terrainHeight = TerrainGenerator.MIN_HEIGHT;
+                    }
+                    
+                    if (terrainHeight >= TerrainGenerator.MAX_HEIGHT)
+                    {
+                        terrainHeight = TerrainGenerator.MAX_HEIGHT - 1;
                     }
                     
                     // Debug occasional heights
                     if (x == 0 && z == 0)
                     {
-                        Debug.Log($"Terrain height at chunk {ChunkPosition} origin: {terrainHeight}");
+                        Debug.Log($"Terrain height at chunk {ChunkPosition}, Y={YLevel} origin: {terrainHeight}");
                     }
+                    
+                    // Get biome weights for blending
+                    float[,] biomeWeights = worldManager.GetBiomeWeightsAt(worldX, worldZ);
+                    BiomeType dominantBiome = worldManager.GetBiomeAt(worldX, worldZ);
                     
                     for (int y = 0; y < chunkSize; y++) {
                         // World Y position
-                        float worldY = worldPosition.y + y;
+                        int worldY = YLevel * chunkSize + y;
+                        
+                        // Skip if outside world range
+                        if (worldY < TerrainGenerator.MIN_HEIGHT || worldY >= TerrainGenerator.MAX_HEIGHT)
+                        {
+                            blocks[x, y, z] = new Block(BlockType.Air);
+                            continue;
+                        }
                         
                         // Default to air
                         BlockType blockType = BlockType.Air;
                         
                         // If below terrain height, it's solid ground
-                        if (y < terrainHeight)
+                        if (worldY <= terrainHeight)
                         {
                             // Check if this should be a cave
-                            if (worldManager.IsCave(worldX, worldY, worldZ))
+                            bool isCave = worldManager.IsCave(worldX, worldY, worldZ);
+                            if (isCave)
                             {
                                 blockType = BlockType.Air;
                             }
-                            else if (y == terrainHeight - 1)
-                            {
-                                // Top block is grass
-                                blockType = BlockType.Grass;
-                            }
-                            else if (y > terrainHeight - 4)
-                            {
-                                // A few blocks below the surface are dirt
-                                blockType = BlockType.Dirt;
-                            }
                             else
                             {
-                                // Everything else is stone
-                                blockType = BlockType.Stone;
+                                // Determine block type with biome blending
+                                blockType = DetermineBlendedBlockType(worldX, worldZ, worldY, terrainHeight, biomeWeights);
                             }
+                        }
+                        
+                        // Handle water (sea level)
+                        if (blockType == BlockType.Air && worldY < TerrainGenerator.SEA_LEVEL)
+                        {
+                            // In the future, this would be water - for now we'll still use air
+                            // blockType = BlockType.Water; 
                         }
                         
                         // Create the block of appropriate type
@@ -167,23 +185,175 @@ public class Chunk : MonoBehaviour {
                 }
             }
             
-            Debug.Log($"Finished generating chunk at {ChunkPosition}");
+            Debug.Log($"Finished generating chunk at {ChunkPosition}, Y={YLevel}");
         }
         catch (System.Exception e)
         {
             // Log the error and generate simple terrain as fallback
-            Debug.LogError($"Error generating chunk at {ChunkPosition}: {e.Message}\n{e.StackTrace}");
+            Debug.LogError($"Error generating chunk at {ChunkPosition}, Y={YLevel}: {e.Message}\n{e.StackTrace}");
             GenerateSimpleTerrain();
         }
     }
     
-    // Simple terrain generation if no world manager is available
+    // Update the DetermineBlockType method to handle biome blending
+    private BlockType DetermineBlockType(BiomeType biome, int worldY, int terrainHeight)
+    {
+        // Bedrock layer (bottom 1-2 blocks of the world)
+        if (worldY <= TerrainGenerator.MIN_HEIGHT + 1) 
+        {
+            return BlockType.Bedrock;
+        }
+        
+        // Calculate depth from surface
+        int depthFromSurface = terrainHeight - worldY;
+        
+        // Surface blocks (top layer)
+        if (depthFromSurface == 0) 
+        {
+            switch (biome)
+            {
+                case BiomeType.Desert:
+                    return BlockType.Sand;
+                case BiomeType.Mountains:
+                    // Snow on peaks above certain height
+                    if (worldY > TerrainGenerator.SEA_LEVEL + 30)
+                    {
+                        return BlockType.SnowGrass;
+                    }
+                    // Regular grass or stone at lower elevations
+                    return worldY > TerrainGenerator.SEA_LEVEL + 15 ? BlockType.Stone : BlockType.Grass;
+                case BiomeType.Ocean:
+                    return BlockType.Sand; // Sand at ocean floor
+                default: // Plains, Forest
+                    return BlockType.Grass;
+            }
+        }
+        
+        // Mid layer (few blocks below surface)
+        if (depthFromSurface < 4) 
+        {
+            switch (biome)
+            {
+                case BiomeType.Desert:
+                    return BlockType.Sand;
+                case BiomeType.Ocean:
+                    return worldY > TerrainGenerator.SEA_LEVEL - 10 ? BlockType.Sand : BlockType.Clay;
+                default: // Mountains, Plains, Forest
+                    return BlockType.Dirt;
+            }
+        }
+        
+        // Deep layer (everything else)
+        return BlockType.Stone;
+    }
+
+    // New method to blend blocks between biomes
+    private BlockType DetermineBlendedBlockType(float worldX, float worldZ, int worldY, int terrainHeight, float[,] biomeWeights)
+    {
+        // Depth from surface is key to determining block type
+        int depthFromSurface = terrainHeight - worldY;
+        
+        // Bedrock is always bedrock regardless of biome
+        if (worldY <= TerrainGenerator.MIN_HEIGHT + 1)
+        {
+            return BlockType.Bedrock;
+        }
+        
+        // Deep underground is always stone
+        if (depthFromSurface > 6)
+        {
+            return BlockType.Stone;
+        }
+        
+        // Special handling for surface blocks (blend between biomes)
+        if (depthFromSurface == 0)
+        {
+            // Check for special elevation-based overrides that apply regardless of biome
+            if (worldY > TerrainGenerator.SEA_LEVEL + 35)
+            {
+                // High mountain peaks are always snowy
+                return BlockType.SnowGrass;
+            }
+            
+            // For areas near sea level, prioritize sand for smoother transitions to water
+            if (worldY < TerrainGenerator.SEA_LEVEL + 2)
+            {
+                // Near sea level is more likely to be sand
+                return BlockType.Sand;
+            }
+            
+            // Surface blocks use biome blending - find strongest influences
+            float desertWeight = biomeWeights[(int)BiomeType.Desert, 1];
+            float mountainWeight = biomeWeights[(int)BiomeType.Mountains, 1];
+            float oceanWeight = biomeWeights[(int)BiomeType.Ocean, 1];
+            
+            // Clear biome dominance
+            if (desertWeight > 0.6f)
+            {
+                return BlockType.Sand;
+            }
+            if (oceanWeight > 0.6f)
+            {
+                return BlockType.Sand; // Ocean floor is sand
+            }
+            if (mountainWeight > 0.6f && worldY > TerrainGenerator.SEA_LEVEL + 20)
+            {
+                return BlockType.Stone; // High mountains are stone
+            }
+            
+            // Blended areas - use a random factor seeded by position to create a natural pattern
+            float randomFactor = Mathf.PerlinNoise(worldX * 0.8f, worldZ * 0.8f);
+            
+            // Desert/grass transition
+            if (desertWeight > 0.2f && randomFactor < desertWeight)
+            {
+                return BlockType.Sand;
+            }
+            
+            // Mountain/grass transition
+            if (mountainWeight > 0.3f && worldY > TerrainGenerator.SEA_LEVEL + 15 && randomFactor < mountainWeight)
+            {
+                return BlockType.Stone;
+            }
+            
+            // Default surface block is grass
+            return BlockType.Grass;
+        }
+        
+        // Mid layers - blend between dirt and sand primarily
+        if (depthFromSurface <= 3)
+        {
+            float desertWeight = biomeWeights[(int)BiomeType.Desert, 1];
+            float oceanWeight = biomeWeights[(int)BiomeType.Ocean, 1];
+            
+            // Stronger desert influence = sand
+            if (desertWeight > 0.5f || (oceanWeight > 0.3f && worldY > TerrainGenerator.SEA_LEVEL - 8))
+            {
+                return BlockType.Sand;
+            }
+            
+            // Default mid layer is dirt
+            return BlockType.Dirt;
+        }
+        
+        // Deeper layers blend to stone
+        float stoneBlend = Mathf.Clamp01((depthFromSurface - 3) / 3f);
+        float transitionNoise = Mathf.PerlinNoise(worldX * 0.5f, worldZ * 0.5f);
+        
+        if (transitionNoise < stoneBlend)
+        {
+            return BlockType.Stone;
+        }
+        return BlockType.Dirt;
+    }
+
+    // Update GenerateSimpleTerrain to handle Y level
     private void GenerateSimpleTerrain()
     {
         // Get world position for this chunk
         Vector3 worldPosition = new Vector3(
             ChunkPosition.x * chunkSize,
-            0,
+            YLevel * chunkSize,
             ChunkPosition.y * chunkSize
         );
         
@@ -194,26 +364,35 @@ public class Chunk : MonoBehaviour {
                 float worldZ = worldPosition.z + z;
                 
                 // Simple terrain height formula
-                float height = Mathf.PerlinNoise(worldX * 0.1f, worldZ * 0.1f) * 8 + 4;
+                float height = Mathf.PerlinNoise(worldX * 0.1f, worldZ * 0.1f) * 8 + TerrainGenerator.SEA_LEVEL - 10;
                 int terrainHeight = Mathf.FloorToInt(height);
                 
                 for (int y = 0; y < chunkSize; y++) {
+                    // World Y position
+                    int worldY = YLevel * chunkSize + y;
+                    
+                    BlockType blockType = BlockType.Air;
+                    
                     // Terrain generation rules
-                    if (y < terrainHeight) {
-                        if (y == terrainHeight - 1) {
+                    if (worldY < terrainHeight) {
+                        if (worldY == terrainHeight - 1) {
                             // Top block is grass
-                            blocks[x, y, z] = new Block(BlockType.Grass);
-                        } else if (y > terrainHeight - 4) {
+                            blockType = BlockType.Grass;
+                        } else if (worldY > terrainHeight - 4) {
                             // A few blocks below the surface are dirt
-                            blocks[x, y, z] = new Block(BlockType.Dirt);
+                            blockType = BlockType.Dirt;
                         } else {
                             // Everything else is stone
-                            blocks[x, y, z] = new Block(BlockType.Stone);
+                            blockType = BlockType.Stone;
                         }
-                    } else {
-                        // Above terrain is air
-                        blocks[x, y, z] = new Block(BlockType.Air);
                     }
+                    
+                    // Generate bedrock at the bottom of the world
+                    if (worldY <= TerrainGenerator.MIN_HEIGHT + 1) {
+                        blockType = BlockType.Bedrock;
+                    }
+                    
+                    blocks[x, y, z] = new Block(blockType);
                 }
             }
         }
@@ -343,5 +522,11 @@ public class Chunk : MonoBehaviour {
             Mathf.FloorToInt(worldPosition.y) - Mathf.FloorToInt(transform.position.y),
             Mathf.FloorToInt(worldPosition.z) - Mathf.FloorToInt(transform.position.z)
         );
+    }
+
+    // Add a public method to regenerate the mesh without changing blocks
+    public void RegenerateMesh()
+    {
+        GenerateMesh();
     }
 }

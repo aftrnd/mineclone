@@ -9,6 +9,8 @@ public class MinecraftPlayerController : MonoBehaviour
     [SerializeField] private float sprintSpeed = 5.612f; // Minecraft sprint speed in blocks/second
     [SerializeField] private float jumpForce = 9.0f; // Initial jump velocity
     [SerializeField] private float gravity = 30.0f; // Higher than normal gravity for Minecraft feel
+    [SerializeField] private float flightSpeed = 8.0f; // Creative mode flight speed
+    [SerializeField] private float flightSprintSpeed = 16.0f; // Creative mode sprint flight speed
 
     [Header("Player Parameters")]
     [SerializeField] private float playerHeight = 1.8f; // Player is 1.8 blocks tall in Minecraft
@@ -18,6 +20,7 @@ public class MinecraftPlayerController : MonoBehaviour
     [Header("Gameplay")]
     [SerializeField] private bool canSprint = true;
     [SerializeField] private bool canJump = true;
+    [SerializeField] private bool canFly = true; // Enable/disable flying ability
 
     // References
     private CharacterController characterController;
@@ -26,11 +29,15 @@ public class MinecraftPlayerController : MonoBehaviour
     private Vector3 velocity = Vector3.zero;
     private bool isGrounded;
     private bool isSprinting;
+    private bool isFlying = false; // Track if player is in flight mode
 
     // Input actions
     private Vector2 movementInput;
     private bool jumpInput;
     private bool sprintInput;
+    private bool flyToggleInput;
+    private bool flyUpInput;
+    private bool flyDownInput;
 
     private bool firstUpdateDone = false;
 
@@ -132,6 +139,14 @@ public class MinecraftPlayerController : MonoBehaviour
             PositionCameraAtEyeHeight();
         }
         
+        // Handle flight toggle with F key
+        if (flyToggleInput && canFly)
+        {
+            isFlying = !isFlying;
+            velocity = Vector3.zero; // Reset velocity when toggling flight
+            Debug.Log("Flight mode: " + (isFlying ? "Enabled" : "Disabled"));
+        }
+        
         HandleMovement();
     }
 
@@ -143,18 +158,42 @@ public class MinecraftPlayerController : MonoBehaviour
     public void OnJump(InputAction.CallbackContext context)
     {
         jumpInput = context.ReadValueAsButton();
+        
+        // In flight mode, jump is used to fly up
+        if (isFlying)
+        {
+            flyUpInput = context.ReadValueAsButton();
+        }
     }
 
     public void OnSprint(InputAction.CallbackContext context)
     {
         sprintInput = context.ReadValueAsButton();
     }
+    
+    public void OnFlyToggle(InputAction.CallbackContext context)
+    {
+        // Only trigger on button press, not hold
+        if (context.performed)
+        {
+            flyToggleInput = true;
+        }
+        else
+        {
+            flyToggleInput = false;
+        }
+    }
+    
+    public void OnFlyDown(InputAction.CallbackContext context)
+    {
+        flyDownInput = context.ReadValueAsButton();
+    }
 
     private void HandleMovement()
     {
         isGrounded = characterController.isGrounded;
         
-        if (isGrounded && velocity.y < 0)
+        if (isGrounded && velocity.y < 0 && !isFlying)
         {
             velocity.y = -1f; // Small negative value instead of zero to keep grounded
         }
@@ -171,9 +210,18 @@ public class MinecraftPlayerController : MonoBehaviour
 
         Vector3 movement = (forward * movementInput.y + right * movementInput.x);
         
-        // Determine speed based on sprint state
+        // Determine speed based on sprint state and flight mode
         isSprinting = canSprint && sprintInput && movementInput.y > 0.1f;
-        float currentSpeed = isSprinting ? sprintSpeed : walkSpeed;
+        float currentSpeed;
+        
+        if (isFlying)
+        {
+            currentSpeed = isSprinting ? flightSprintSpeed : flightSpeed;
+        }
+        else
+        {
+            currentSpeed = isSprinting ? sprintSpeed : walkSpeed;
+        }
         
         // Apply movement
         if (movement.magnitude > 1f)
@@ -181,14 +229,32 @@ public class MinecraftPlayerController : MonoBehaviour
             
         characterController.Move(movement * currentSpeed * Time.deltaTime);
 
-        // Handle jumping
-        if (canJump && isGrounded && jumpInput)
+        // Handle vertical movement
+        if (isFlying)
         {
-            velocity.y = jumpForce;
+            // In flight mode, control vertical movement directly
+            velocity.y = 0; // Reset gravity effect
+            
+            if (flyUpInput)
+            {
+                velocity.y = flightSpeed;
+            }
+            else if (flyDownInput)
+            {
+                velocity.y = -flightSpeed;
+            }
         }
+        else
+        {
+            // Normal jumping in non-flight mode
+            if (canJump && isGrounded && jumpInput)
+            {
+                velocity.y = jumpForce;
+            }
 
-        // Apply gravity
-        velocity.y -= gravity * Time.deltaTime;
+            // Apply gravity in non-flight mode
+            velocity.y -= gravity * Time.deltaTime;
+        }
         
         // Apply vertical movement
         characterController.Move(velocity * Time.deltaTime);
