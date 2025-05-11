@@ -10,8 +10,28 @@ public class Chunk : MonoBehaviour {
     private MeshCollider meshCollider;
     
     [SerializeField] private Material blockMaterial;
+    
+    // Chunk position in the grid
+    public Vector2Int ChunkPosition { get; private set; }
+    
+    // Reference to the world manager
+    private WorldManager worldManager;
 
-    void Start() {
+    // Initialize the chunk with position
+    public void Initialize(Vector2Int chunkPosition)
+    {
+        ChunkPosition = chunkPosition;
+        
+        // Find the world manager if not set
+        if (worldManager == null)
+        {
+            worldManager = FindObjectOfType<WorldManager>();
+        }
+        
+        GenerateBlocks();
+    }
+
+    void Awake() {
         meshFilter = GetComponent<MeshFilter>();
         meshRenderer = GetComponent<MeshRenderer>();
         meshCollider = GetComponent<MeshCollider>();
@@ -48,25 +68,150 @@ public class Chunk : MonoBehaviour {
             }
         }
         
-        GenerateBlocks();
+        // Find the world manager
+        worldManager = FindObjectOfType<WorldManager>();
+    }
+
+    void Start() {
+        // If chunk position not set, default to position based on Transform
+        if (ChunkPosition == default)
+        {
+            Vector3 pos = transform.position;
+            ChunkPosition = new Vector2Int(
+                Mathf.FloorToInt(pos.x / chunkSize),
+                Mathf.FloorToInt(pos.z / chunkSize)
+            );
+            GenerateBlocks();
+        }
+        
         GenerateMesh();
     }
 
     void GenerateBlocks() {
+        try
+        {
+            // If no world manager, use simple terrain generation
+            if (worldManager == null)
+            {
+                Debug.LogWarning($"No WorldManager found for chunk at {ChunkPosition}. Using simple terrain generation.");
+                GenerateSimpleTerrain();
+                return;
+            }
+            
+            // Get world position for this chunk
+            Vector3 worldPosition = new Vector3(
+                ChunkPosition.x * chunkSize,
+                0,
+                ChunkPosition.y * chunkSize
+            );
+            
+            Debug.Log($"Generating chunk at {ChunkPosition} (world pos: {worldPosition})");
+            
+            for (int x = 0; x < chunkSize; x++) {
+                for (int z = 0; z < chunkSize; z++) {
+                    // World position of this block
+                    float worldX = worldPosition.x + x;
+                    float worldZ = worldPosition.z + z;
+                    
+                    // Get height from terrain generator
+                    int terrainHeight = worldManager.GetTerrainHeight(worldX, worldZ);
+                    
+                    // Validate height (shouldn't be negative)
+                    if (terrainHeight < 0)
+                    {
+                        Debug.LogError($"Terrain generator returned negative height ({terrainHeight}) at {worldX},{worldZ}");
+                        terrainHeight = 0;
+                    }
+                    
+                    // Debug occasional heights
+                    if (x == 0 && z == 0)
+                    {
+                        Debug.Log($"Terrain height at chunk {ChunkPosition} origin: {terrainHeight}");
+                    }
+                    
+                    for (int y = 0; y < chunkSize; y++) {
+                        // World Y position
+                        float worldY = worldPosition.y + y;
+                        
+                        // Default to air
+                        BlockType blockType = BlockType.Air;
+                        
+                        // If below terrain height, it's solid ground
+                        if (y < terrainHeight)
+                        {
+                            // Check if this should be a cave
+                            if (worldManager.IsCave(worldX, worldY, worldZ))
+                            {
+                                blockType = BlockType.Air;
+                            }
+                            else if (y == terrainHeight - 1)
+                            {
+                                // Top block is grass
+                                blockType = BlockType.Grass;
+                            }
+                            else if (y > terrainHeight - 4)
+                            {
+                                // A few blocks below the surface are dirt
+                                blockType = BlockType.Dirt;
+                            }
+                            else
+                            {
+                                // Everything else is stone
+                                blockType = BlockType.Stone;
+                            }
+                        }
+                        
+                        // Create the block of appropriate type
+                        blocks[x, y, z] = new Block(blockType);
+                    }
+                }
+            }
+            
+            Debug.Log($"Finished generating chunk at {ChunkPosition}");
+        }
+        catch (System.Exception e)
+        {
+            // Log the error and generate simple terrain as fallback
+            Debug.LogError($"Error generating chunk at {ChunkPosition}: {e.Message}\n{e.StackTrace}");
+            GenerateSimpleTerrain();
+        }
+    }
+    
+    // Simple terrain generation if no world manager is available
+    private void GenerateSimpleTerrain()
+    {
+        // Get world position for this chunk
+        Vector3 worldPosition = new Vector3(
+            ChunkPosition.x * chunkSize,
+            0,
+            ChunkPosition.y * chunkSize
+        );
+        
         for (int x = 0; x < chunkSize; x++) {
             for (int z = 0; z < chunkSize; z++) {
-                // Find the top layer for each x,z column (half the chunk height)
-                int topY = chunkSize / 2 - 1;
+                // World position of this block
+                float worldX = worldPosition.x + x;
+                float worldZ = worldPosition.z + z;
+                
+                // Simple terrain height formula
+                float height = Mathf.PerlinNoise(worldX * 0.1f, worldZ * 0.1f) * 8 + 4;
+                int terrainHeight = Mathf.FloorToInt(height);
                 
                 for (int y = 0; y < chunkSize; y++) {
-                    if (y < chunkSize / 2) {
-                        // Set the top layer to grass, everything below to dirt
-                        if (y == topY) {
+                    // Terrain generation rules
+                    if (y < terrainHeight) {
+                        if (y == terrainHeight - 1) {
+                            // Top block is grass
                             blocks[x, y, z] = new Block(BlockType.Grass);
-                        } else {
+                        } else if (y > terrainHeight - 4) {
+                            // A few blocks below the surface are dirt
                             blocks[x, y, z] = new Block(BlockType.Dirt);
+                        } else {
+                            // Everything else is stone
+                            blocks[x, y, z] = new Block(BlockType.Stone);
                         }
                     } else {
+                        // Above terrain is air
                         blocks[x, y, z] = new Block(BlockType.Air);
                     }
                 }
@@ -90,8 +235,32 @@ public class Chunk : MonoBehaviour {
                         Vector3Int dir = Vector3Int.RoundToInt(MeshBuilder.FaceDirection(i));
                         Vector3Int neighborPos = pos + dir;
 
-                        if (!InBounds(neighborPos) || !blocks[neighborPos.x, neighborPos.y, neighborPos.z].IsSolid()) {
-                            builder.AddFace(pos, i, block.GetTextureID(i)); // Only add face if neighbor is air or out of bounds
+                        // If neighbor is in bounds, check if it's solid
+                        if (InBounds(neighborPos)) {
+                            if (!blocks[neighborPos.x, neighborPos.y, neighborPos.z].IsSolid()) {
+                                builder.AddFace(pos, i, block.GetTextureID(i));
+                            }
+                        }
+                        // If neighbor is out of bounds, check adjacent chunk
+                        else {
+                            // Get world position of this chunk
+                            Vector3 worldPosition = transform.position;
+                            
+                            // Calculate world position of the neighbor block
+                            Vector3 neighborWorldPos = worldPosition + new Vector3(
+                                pos.x + dir.x,
+                                pos.y + dir.y,
+                                pos.z + dir.z
+                            );
+                            
+                            // Check if the neighbor block is solid
+                            BlockType neighborBlockType = worldManager != null ? 
+                                worldManager.GetBlockAt(neighborWorldPos) : 
+                                BlockType.Air;
+                                
+                            if (neighborBlockType == BlockType.Air) {
+                                builder.AddFace(pos, i, block.GetTextureID(i));
+                            }
                         }
                     }
                 }
@@ -103,7 +272,6 @@ public class Chunk : MonoBehaviour {
         
         // Apply the same mesh to the collider
         meshCollider.sharedMesh = mesh;
-        Debug.Log("Applied mesh to collider for chunk collision");
     }
 
     bool InBounds(Vector3Int pos) {

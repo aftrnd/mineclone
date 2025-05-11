@@ -28,6 +28,8 @@ public class BlockInteraction : MonoBehaviour
     
     private bool wasBreakingLastFrame = false;
     
+    private WorldManager worldManager;
+    
     private void Start()
     {
         Debug.Log("BlockInteraction Start method called");
@@ -158,6 +160,13 @@ public class BlockInteraction : MonoBehaviour
         
         // Make sure blocks have the correct tag
         Debug.Log("Checking block layer mask: " + blockLayer.value);
+        
+        // Find the world manager
+        worldManager = FindObjectOfType<WorldManager>();
+        if (worldManager == null)
+        {
+            Debug.LogWarning("WorldManager not found! Cross-chunk block interaction won't work.");
+        }
     }
     
     public void OnAttack(InputAction.CallbackContext context)
@@ -502,7 +511,7 @@ public class BlockInteraction : MonoBehaviour
         wasPlacingLastFrame = isPlacingBlock;
     }
     
-    // Replace the HandleBlockInteraction method:
+    // Update the HandleBlockInteraction method to use WorldManager
     private void HandleBlockInteraction()
     {
         // Ensure we have a camera reference
@@ -543,23 +552,29 @@ public class BlockInteraction : MonoBehaviour
                 // Only break a block when attack input is first pressed, not while held
                 if (!wasBreakingLastFrame)
                 {
-                    // Try to get chunk from hit collider
-                    Chunk chunk = hit.collider.GetComponent<Chunk>();
+                    // Get the exact block position (center of the block)
+                    Vector3 blockPos = hit.point - (hit.normal * 0.01f); // Move slightly inside the block
+                    Vector3Int blockWorldPos = new Vector3Int(
+                        Mathf.FloorToInt(blockPos.x),
+                        Mathf.FloorToInt(blockPos.y),
+                        Mathf.FloorToInt(blockPos.z)
+                    );
                     
-                    // If the hit collider is the chunk's mesh collider
-                    if (chunk != null)
+                    // Use WorldManager if available, otherwise fall back to direct chunk interaction
+                    if (worldManager != null)
                     {
-                        // Convert world position to chunk-local coordinates - using hit.point and normal
-                        Vector3 blockPos = hit.point - (hit.normal * 0.01f); // Move slightly inside the block
-                        
-                        Vector3Int localPos = new Vector3Int(
-                            Mathf.FloorToInt(blockPos.x) - Mathf.FloorToInt(chunk.transform.position.x),
-                            Mathf.FloorToInt(blockPos.y) - Mathf.FloorToInt(chunk.transform.position.y),
-                            Mathf.FloorToInt(blockPos.z) - Mathf.FloorToInt(chunk.transform.position.z)
-                        );
-                        
-                        // Call the chunk's method to remove the block
-                        chunk.RemoveBlock(localPos.x, localPos.y, localPos.z);
+                        worldManager.SetBlockAt(blockWorldPos, BlockType.Air);
+                        Debug.Log($"Breaking block at {blockWorldPos} using WorldManager");
+                    }
+                    else
+                    {
+                        // Legacy code path for single-chunk mode
+                        Chunk chunk = hit.collider.GetComponent<Chunk>();
+                        if (chunk != null)
+                        {
+                            Vector3Int localPos = chunk.WorldToLocalPosition(blockPos);
+                            chunk.RemoveBlock(localPos.x, localPos.y, localPos.z);
+                        }
                     }
                 }
             }
@@ -575,39 +590,31 @@ public class BlockInteraction : MonoBehaviour
                     Mathf.FloorToInt(placePosition.z)
                 );
                 
-                // Try to determine which chunk this would belong to
-                Chunk chunk = hit.collider.GetComponent<Chunk>();
-                if (chunk != null)
+                // Get the selected block type
+                BlockType blockTypeToPlace = GetSelectedBlockType();
+                
+                // Use WorldManager if available, otherwise fall back to direct chunk interaction
+                if (worldManager != null)
                 {
-                    Vector3Int localPos = chunk.WorldToLocalPosition(placePosition);
-                    
-                    // Check if the position is in bounds of this chunk
-                    if (localPos.x >= 0 && localPos.x < Chunk.chunkSize &&
-                        localPos.y >= 0 && localPos.y < Chunk.chunkSize &&
-                        localPos.z >= 0 && localPos.z < Chunk.chunkSize)
+                    worldManager.SetBlockAt(placeWorldPos, blockTypeToPlace);
+                    Debug.Log($"Placing {blockTypeToPlace} block at {placeWorldPos} using WorldManager");
+                }
+                else
+                {
+                    // Legacy code path for single-chunk mode
+                    Chunk chunk = hit.collider.GetComponent<Chunk>();
+                    if (chunk != null)
                     {
-                        // Determine block type from selectedBlockType index
-                        BlockType blockTypeToPlace = BlockType.Dirt; // Default
+                        Vector3Int localPos = chunk.WorldToLocalPosition(placePosition);
                         
-                        // Convert selectedBlockType (1-indexed) to a BlockType
-                        switch (selectedBlockType)
+                        // Check if the position is in bounds of this chunk
+                        if (localPos.x >= 0 && localPos.x < Chunk.chunkSize &&
+                            localPos.y >= 0 && localPos.y < Chunk.chunkSize &&
+                            localPos.z >= 0 && localPos.z < Chunk.chunkSize)
                         {
-                            case 1:
-                                blockTypeToPlace = BlockType.Dirt;
-                                break;
-                            case 2:
-                                blockTypeToPlace = BlockType.Stone;
-                                break;
-                            case 3:
-                                blockTypeToPlace = BlockType.Grass;
-                                break;
-                            default:
-                                blockTypeToPlace = BlockType.Dirt;
-                                break;
+                            // Add the block
+                            chunk.AddBlock(localPos.x, localPos.y, localPos.z, blockTypeToPlace);
                         }
-                        
-                        // Add the block
-                        chunk.AddBlock(localPos.x, localPos.y, localPos.z, blockTypeToPlace);
                     }
                 }
             }
@@ -758,6 +765,52 @@ public class BlockInteraction : MonoBehaviour
         {
             selectedBlockType = blockTypeIndex;
             Debug.Log($"Selected Block Type: {selectedBlockType} - {blockTypeNames[selectedBlockType]}");
+        }
+    }
+    
+    public void BreakBlock(Vector3 position)
+    {
+        if (worldManager != null)
+        {
+            // Use world manager to break blocks (works across chunks)
+            worldManager.SetBlockAt(position, BlockType.Air);
+        }
+        else
+        {
+            // Legacy code path for single-chunk mode
+            RaycastHit hit;
+            if (Physics.Raycast(position, Vector3.down, out hit, 0.1f, blockLayer))
+            {
+                Chunk chunk = hit.collider.GetComponentInParent<Chunk>();
+                if (chunk != null)
+                {
+                    Vector3Int localPos = chunk.WorldToLocalPosition(position);
+                    chunk.RemoveBlock(localPos.x, localPos.y, localPos.z);
+                }
+            }
+        }
+    }
+    
+    public void PlaceBlock(Vector3 position, BlockType blockType)
+    {
+        if (worldManager != null)
+        {
+            // Use world manager to place blocks (works across chunks)
+            worldManager.SetBlockAt(position, blockType);
+        }
+        else
+        {
+            // Legacy code path for single-chunk mode
+            RaycastHit hit;
+            if (Physics.Raycast(position, Vector3.down, out hit, 0.1f, blockLayer))
+            {
+                Chunk chunk = hit.collider.GetComponentInParent<Chunk>();
+                if (chunk != null)
+                {
+                    Vector3Int localPos = chunk.WorldToLocalPosition(position);
+                    chunk.AddBlock(localPos.x, localPos.y, localPos.z, blockType);
+                }
+            }
         }
     }
 } 
