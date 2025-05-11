@@ -76,7 +76,6 @@ public class MinecraftCameraController : MonoBehaviour
     public void OnLook(InputAction.CallbackContext context)
     {
         lookInput = context.ReadValue<Vector2>();
-        Debug.Log($"OnLook called: Input = ({lookInput.x}, {lookInput.y})");
     }
     
     // Prevent any accidental resets of camera position

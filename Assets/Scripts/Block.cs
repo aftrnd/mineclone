@@ -18,6 +18,10 @@ public class Block {
         return type != BlockType.Air;
     }
 
+    public BlockType GetBlockType() {
+        return type;
+    }
+
     public int GetTextureID(int face) {
         switch (type) {
             case BlockType.Dirt:

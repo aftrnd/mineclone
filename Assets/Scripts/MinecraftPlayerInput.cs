@@ -114,6 +114,8 @@ public class MinecraftPlayerInput : MonoBehaviour
         
         playerActions.FindAction("Next").performed += blockInteraction.OnNextBlock;
         playerActions.FindAction("Previous").performed += blockInteraction.OnPreviousBlock;
+        
+        Debug.Log("Setting up input actions - Block interaction should use Attack (left-click) and Interact (right-click)");
     }
     
     private void OnDisable()
@@ -165,6 +167,19 @@ public class MinecraftPlayerInput : MonoBehaviour
                     field.SetValue(blockInteraction, highlighter);
                     Debug.Log("Successfully connected BlockHighlighter to BlockInteraction via code");
                 }
+            }
+        }
+    }
+
+    private void Update() 
+    {
+        if (blockInteraction != null)
+        {
+            // Debug the current selected block type
+            if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Alpha2) || 
+                Input.GetKeyDown(KeyCode.Alpha3) || Input.GetKeyDown(KeyCode.Alpha4))
+            {
+                Debug.Log("Number key pressed for block selection");
             }
         }
     }

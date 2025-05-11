@@ -14,10 +14,13 @@ public class BlockHighlighter : MonoBehaviour
     
     private void Awake()
     {
+        Debug.Log("BlockHighlighter Awake called");
+        
         // Create line renderer if it doesn't exist
         lineRenderer = gameObject.GetComponent<LineRenderer>();
         if (lineRenderer == null)
         {
+            Debug.Log("No LineRenderer found - adding one");
             lineRenderer = gameObject.AddComponent<LineRenderer>();
         }
         
@@ -26,19 +29,62 @@ public class BlockHighlighter : MonoBehaviour
         lineRenderer.startWidth = lineWidth;
         lineRenderer.endWidth = lineWidth;
         lineRenderer.positionCount = 24; // 12 lines, 2 points each
-        lineRenderer.material = lineMaterial != null ? lineMaterial : new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+        
+        // Create a material if none provided
+        if (lineMaterial == null)
+        {
+            Debug.LogWarning("No line material assigned - creating a default one");
+            // Try to find a suitable shader
+            Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+            if (shader == null)
+            {
+                shader = Shader.Find("Unlit/Color");
+            }
+            if (shader == null)
+            {
+                Debug.LogError("Could not find a suitable shader for line renderer");
+                shader = Shader.Find("Standard");
+            }
+            
+            lineMaterial = new Material(shader);
+            lineMaterial.color = highlightColor;
+        }
+        
+        lineRenderer.material = lineMaterial;
         lineRenderer.startColor = highlightColor;
         lineRenderer.endColor = highlightColor;
         lineRenderer.enabled = false;
+        
+        Debug.Log("BlockHighlighter setup complete - line renderer configured");
     }
     
     public void ShowHighlight(Vector3 position)
     {
+        Debug.Log($"ShowHighlight called at position {position}");
         blockPosition = new Vector3(
             Mathf.Floor(position.x) + 0.5f,
             Mathf.Floor(position.y) + 0.5f, 
             Mathf.Floor(position.z) + 0.5f
         );
+        
+        if (lineRenderer == null)
+        {
+            Debug.LogError("LineRenderer is null in ShowHighlight!");
+            lineRenderer = GetComponent<LineRenderer>();
+            if (lineRenderer == null)
+            {
+                Debug.LogError("Still can't find LineRenderer - adding one now");
+                lineRenderer = gameObject.AddComponent<LineRenderer>();
+                // Configure the line renderer again
+                lineRenderer.useWorldSpace = true;
+                lineRenderer.startWidth = lineWidth;
+                lineRenderer.endWidth = lineWidth;
+                lineRenderer.positionCount = 24;
+                lineRenderer.material = lineMaterial;
+                lineRenderer.startColor = highlightColor;
+                lineRenderer.endColor = highlightColor;
+            }
+        }
         
         UpdateLineRenderer();
         lineRenderer.enabled = true;
@@ -47,7 +93,14 @@ public class BlockHighlighter : MonoBehaviour
     
     public void HideHighlight()
     {
-        lineRenderer.enabled = false;
+        if (lineRenderer != null)
+        {
+            lineRenderer.enabled = false;
+        }
+        else
+        {
+            Debug.LogError("LineRenderer is null in HideHighlight!");
+        }
         isActive = false;
     }
     
