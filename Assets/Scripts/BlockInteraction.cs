@@ -280,12 +280,45 @@ public class BlockInteraction : MonoBehaviour
         // Only show if enabled
         if (showSelectedBlockTypeInUI)
         {
-            // Show current selected block in the upper right corner
+            // Define a style for the label
+            GUIStyle style = new GUIStyle(GUI.skin.box);
+            style.fontSize = 16;
+            style.fontStyle = FontStyle.Bold;
+            style.normal.textColor = Color.white;
+            style.alignment = TextAnchor.MiddleCenter;
+            style.padding = new RectOffset(10, 10, 5, 5);
+            
+            // Create a background box for better visibility
+            GUI.backgroundColor = new Color(0.2f, 0.2f, 0.2f, 0.8f);
+            
+            // Get the block name
             string blockName = selectedBlockType < blockTypeNames.Length ? 
                 blockTypeNames[selectedBlockType] : "Unknown";
             
-            GUI.Label(new Rect(Screen.width - 150, 20, 140, 30), 
-                $"Selected: {blockName}");
+            // Create a box in the upper right corner
+            Rect boxRect = new Rect(Screen.width - 200, 10, 180, 40);
+            GUI.Box(boxRect, "");
+            
+            // Add label text inside the box
+            GUI.Label(boxRect, $"Selected Block: {blockName}", style);
+            
+            // Draw block color indicator
+            Color blockColor = GetBlockColor(selectedBlockType);
+            Rect colorRect = new Rect(Screen.width - 50, 15, 30, 30);
+            GUI.backgroundColor = blockColor;
+            GUI.Box(colorRect, "");
+        }
+    }
+    
+    // Helper method to get a color representing each block type
+    private Color GetBlockColor(int blockTypeIndex)
+    {
+        switch (blockTypeIndex)
+        {
+            case 1: return new Color(0.6f, 0.4f, 0.2f); // Dirt - brown
+            case 2: return new Color(0.5f, 0.5f, 0.5f); // Stone - gray
+            case 3: return new Color(0.2f, 0.8f, 0.2f); // Grass - green
+            default: return Color.white;
         }
     }
     
@@ -715,6 +748,16 @@ public class BlockInteraction : MonoBehaviour
             case 2: return BlockType.Stone;
             case 3: return BlockType.Grass;
             default: return BlockType.Dirt;
+        }
+    }
+    
+    public void SelectBlockType(int blockTypeIndex)
+    {
+        // Ensure the type is in range
+        if (blockTypeIndex >= 1 && blockTypeIndex < blockTypeNames.Length)
+        {
+            selectedBlockType = blockTypeIndex;
+            Debug.Log($"Selected Block Type: {selectedBlockType} - {blockTypeNames[selectedBlockType]}");
         }
     }
 } 
