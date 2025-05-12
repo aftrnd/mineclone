@@ -21,7 +21,7 @@ public static class BlockTextureManager {
         };
 
         // First, check the format of our textures to determine what format to use
-        string path = "Assets/Blocks/" + textureNames[0] + ".png";
+        string path = "Assets/Textures/" + textureNames[0] + ".png";
         Texture2D sampleTex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(path);
         
         if (sampleTex == null) {
@@ -37,8 +37,8 @@ public static class BlockTextureManager {
         textureArray.filterMode = FilterMode.Point;
 
         for (int i = 0; i < textureNames.Length; i++) {
-            // Load textures directly from Assets/Blocks instead of Resources
-            path = "Assets/Blocks/" + textureNames[i] + ".png";
+            // Load textures directly from Assets/Textures instead of Resources
+            path = "Assets/Textures/" + textureNames[i] + ".png";
             Texture2D tex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(path);
             
             if (tex == null) {
